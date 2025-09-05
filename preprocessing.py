@@ -1,3 +1,5 @@
+# src/preprocessing.py
+
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -6,35 +8,27 @@ from rdkit.Chem import AllChem, SanitizeMol, Descriptors, rdMolDescriptors as rd
 from rdkit.Chem import MACCSkeys
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
+# Import configuration constants
+from config import FP_MORGAN_RADIUS, FP_MORGAN_NBITS
+
 # Suppress RDKit console output
 RDLogger.DisableLog("rdApp.*")
 
 
 def load_and_integrate_datasets(dataset_paths: list, column_map: dict) -> pd.DataFrame:
     """
-    Loads multiple datasets from specified paths, standardizes column names,
-    and integrates them into a single DataFrame.
-
-    Args:
-        dataset_paths (list): A list of file paths to the CSV datasets.
-        column_map (dict): A dictionary to map original column names to
-                           standard names ('SMILES', 'Label').
-
-    Returns:
-        pd.DataFrame: A single DataFrame containing the combined data.
+    Loads, standardizes, and integrates multiple datasets into a single DataFrame.
     """
     print(f"Loading and integrating {len(dataset_paths)} datasets...")
     all_dfs = []
     for path in dataset_paths:
         try:
             df = pd.read_csv(path)
-            # Standardize column names using the provided map
             df.rename(columns=column_map, inplace=True)
-            # Ensure only required columns are kept
             if 'SMILES' in df.columns and 'Label' in df.columns:
                 all_dfs.append(df[['SMILES', 'Label']])
             else:
-                print(f"Warning: {path} is missing 'SMILES' or 'Label' column after mapping. Skipping.")
+                print(f"Warning: {path} is missing required columns after mapping. Skipping.")
         except FileNotFoundError:
             print(f"Warning: Dataset file not found at {path}. Skipping.")
 
@@ -46,74 +40,29 @@ def load_and_integrate_datasets(dataset_paths: list, column_map: dict) -> pd.Dat
     return integrated_df
 
 
-def preprocess_integrated_data(df: pd.DataFrame, max_smiles_len: int = 400) -> pd.DataFrame:
+def preprocess_integrated_data(df: pd.DataFrame, max_smiles_len: int) -> pd.DataFrame:
     """
-    Applies a series of pre-processing steps to the integrated dataset.
-
-    Steps:
-    1. Removes rows with empty or incomplete SMILES strings.
-    2. Filters out SMILES strings that exceed a maximum character length.
-    3. Performs deduplication to ensure each unique chemical structure is represented only once.
-
-    Args:
-        df (pd.DataFrame): The integrated DataFrame with 'SMILES' and 'Label' columns.
-        max_smiles_len (int): The maximum allowed character length for a SMILES string.
-
-    Returns:
-        pd.DataFrame: A cleaned and deduplicated DataFrame.
+    Applies pre-processing steps: removes nulls, filters by length, and deduplicates.
     """
     print("Starting data pre-processing and cleaning...")
     print(f"Initial dataset size: {len(df)} molecules.")
 
-    # 1. Remove empty and incomplete SMILES
     df.dropna(subset=['SMILES'], inplace=True)
     df = df[df['SMILES'].str.strip() != '']
     print(f"Size after removing empty SMILES: {len(df)} molecules.")
 
-    # 2. Filter by SMILES length
     df = df[df['SMILES'].str.len() <= max_smiles_len]
     print(f"Size after filtering SMILES longer than {max_smiles_len} characters: {len(df)} molecules.")
 
-    # 3. Deduplication based on SMILES string
     df.drop_duplicates(subset=['SMILES'], keep='first', inplace=True)
     print(f"Final size after deduplication: {len(df)} unique molecules.")
 
     return df
 
 
-def randomize_smiles(smiles: str) -> str:
+def augment_smiles_data(df: pd.DataFrame, n_augmentations: int) -> pd.DataFrame:
     """
-    Generates a non-canonical, randomized SMILES representation for a given molecule.
-
-    Args:
-        smiles (str): A valid SMILES string.
-
-    Returns:
-        str: A randomized SMILES string, or None if the process fails.
-    """
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        return None
-    try:
-        atom_indices = np.random.permutation(mol.GetNumAtoms()).tolist()
-        randomized_mol = Chem.RenumberAtoms(mol, atom_indices)
-        return Chem.MolToSmiles(randomized_mol, canonical=False, isomericSmiles=True)
-    except Exception:
-        return None
-
-
-def augment_smiles_data(df: pd.DataFrame, n_augmentations: int = 10) -> pd.DataFrame:
-    """
-    Expands the dataset by generating multiple non-canonical SMILES for each molecule.
-    For each molecule, the final set includes its canonical SMILES plus n_augmentations
-    unique, non-canonical variants.
-
-    Args:
-        df (pd.DataFrame): The pre-processed DataFrame of unique molecules.
-        n_augmentations (int): The number of non-canonical versions to generate per molecule.
-
-    Returns:
-        pd.DataFrame: An augmented DataFrame with (original_size * (n_augmentations + 1)) rows.
+    Expands the dataset by generating non-canonical SMILES for each molecule.
     """
     print(f"Starting SMILES augmentation to generate {n_augmentations} variants per molecule...")
     augmented_smiles_list = []
@@ -127,20 +76,21 @@ def augment_smiles_data(df: pd.DataFrame, n_augmentations: int = 10) -> pd.DataF
         if mol is None:
             continue
 
-        # 1. Add the canonical SMILES representation
         canonical_smiles = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=True)
         generated_smiles = {canonical_smiles}
 
-        # 2. Generate non-canonical SMILES representations
-        max_attempts = n_augmentations * 5  # Set a reasonable attempt limit
+        max_attempts = n_augmentations * 5
         attempts = 0
         while len(generated_smiles) < n_augmentations + 1 and attempts < max_attempts:
-            random_s = randomize_smiles(canonical_smiles)
-            if random_s and random_s not in generated_smiles:
-                generated_smiles.add(random_s)
+            random_mol = Chem.MolFromSmiles(canonical_smiles)
+            if random_mol:
+                atom_indices = np.random.permutation(random_mol.GetNumAtoms()).tolist()
+                randomized_mol = Chem.RenumberAtoms(random_mol, atom_indices)
+                random_s = Chem.MolToSmiles(randomized_mol, canonical=False, isomericSmiles=True)
+                if random_s and random_s not in generated_smiles:
+                    generated_smiles.add(random_s)
             attempts += 1
 
-        # Add all generated unique SMILES to the final list
         for smi in generated_smiles:
             augmented_smiles_list.append(smi)
             augmented_labels_list.append(label)
@@ -155,18 +105,13 @@ def augment_smiles_data(df: pd.DataFrame, n_augmentations: int = 10) -> pd.DataF
 
 def calculate_molecular_descriptors(smiles: str) -> list:
     """
-    Calculates a set of molecular descriptors and fingerprints for a given SMILES string.
-
-    Args:
-        smiles (str): A valid SMILES string.
-
-    Returns:
-        list: A list of numerical features, or None if calculation fails.
+    Calculates RDKit descriptors, ECFP (Morgan), and MACCS fingerprints.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return None
     try:
+        # 1. RDKit physicochemical descriptors
         descriptors_val = []
         desc_list = [
             Descriptors.MolWt, Descriptors.MolLogP, Descriptors.NumHDonors,
@@ -180,10 +125,15 @@ def calculate_molecular_descriptors(smiles: str) -> list:
         for desc_func in desc_list:
             descriptors_val.append(desc_func(mol))
 
-        fp_morgan = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=1024)
+        # 2. ECFP (Morgan) Fingerprints (2048-bit)
+        fp_morgan = AllChem.GetMorganFingerprintAsBitVect(mol, FP_MORGAN_RADIUS, nBits=FP_MORGAN_NBITS)
+
+        # 3. MACCS Keys (166-bit)
         fp_maccs = MACCSkeys.GenMACCSKeys(mol)
+
+        # Combine all features
         descriptors_val.extend(list(fp_morgan))
-        descriptors_val.extend(list(fp_maccs))
+        descriptors_val.extend(list(fp_maccs)[1:]) # [1:] to get 166 keys
 
         if np.any(np.isnan(descriptors_val)) or np.any(np.isinf(descriptors_val)):
             return None
@@ -195,13 +145,6 @@ def calculate_molecular_descriptors(smiles: str) -> list:
 def molecule_to_graph(smiles: str) -> tuple:
     """
     Converts a SMILES string into a graph representation (node features and adjacency matrix).
-
-    Args:
-        smiles (str): A valid SMILES string.
-
-    Returns:
-        tuple: A tuple containing the node features array and the adjacency matrix.
-               Returns (None, None) on failure.
     """
     try:
         mol = Chem.MolFromSmiles(smiles)
@@ -210,16 +153,19 @@ def molecule_to_graph(smiles: str) -> tuple:
         if mol is None:
             return None, None
 
+        # Node features based on atom properties
         node_features = []
         for atom in mol.GetAtoms():
             features = [
                 atom.GetAtomicNum(),
                 1 if atom.GetIsAromatic() else 0,
                 atom.GetTotalNumHs(),
-                atom.GetImplicitValence()
+                atom.GetImplicitValence(),
+                atom.GetFormalCharge(),
             ]
             node_features.append(features)
 
+        # Adjacency matrix based on bonds
         adj_matrix = np.zeros((mol.GetNumAtoms(), mol.GetNumAtoms()), dtype=np.float32)
         for bond in mol.GetBonds():
             begin_idx, end_idx = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
