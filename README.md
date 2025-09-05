@@ -1,5 +1,4 @@
 # XP-GCN
-Deep Learning Model for BBBP
+XP-GCN: Extreme Learning Machines and Parallel Graph Convolutional Networks for High-Throughput Prediction of Blood-Brain Barrier Penetration based on Feature Fusion
 
-
-<img width="1024" height="1024" alt="XP-GCN" src="https://github.com/user-attachments/assets/ed2a9007-96fc-495e-9adc-6fe7448394ee" />
+<img width="1024" height="819" alt="XP-GCN" src="https://github.com/user-attachments/assets/42fe05b4-9c62-4a63-8baf-63c90e97680b" />
