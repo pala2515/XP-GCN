@@ -79,7 +79,7 @@ def augment_smiles_data(df: pd.DataFrame, n_augmentations: int) -> pd.DataFrame:
         canonical_smiles = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=True)
         generated_smiles = {canonical_smiles}
 
-        max_attempts = n_augmentations * 5
+        max_attempts = n_augmentations * 10
         attempts = 0
         while len(generated_smiles) < n_augmentations + 1 and attempts < max_attempts:
             random_mol = Chem.MolFromSmiles(canonical_smiles)
