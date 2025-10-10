@@ -27,12 +27,6 @@ HIDDEN_NEURON_SIZES = [10, 25, 50, 100, 200, 500, 1000, 1500, 2000]
 ACTIVATION_FUNCTIONS = ['relu', 'sigmoid', 'tanh', 'mish']
 ELM_LAMBDA_REG = 0.9 # L2 regularization parameter
 
-# --- Feature Selector Configuration ---
-FEATURE_SELECTORS_CONFIG = {
-    "ANOVA": SelectKBest(f_classif, k=NUM_FEATURES_TO_SELECT),
-    "Chi2": SelectKBest(chi2, k=NUM_FEATURES_TO_SELECT)
-}
-
 # --- Ablation Study Scenarios ---
 # These define which feature sets are fed into the ELM classifier
 ABLATION_CONFIGS = {
