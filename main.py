@@ -64,32 +64,6 @@ def extract_graph_features_in_batches(node_features, adj_matrices, model, batch_
         all_features.append(batch_features)
     return np.concatenate(all_features, axis=0)
 
-# === GCN/GAT/ChebConv Modeli ===
-# (Önceki cevapla aynı - GraphConvAblationModel)
-class GraphConvAblationModel(keras.Model):
-    def __init__(self, path1_dim, path2_dim, path3_dim, gat_heads, cheb_k, dropout_rate=0.2):
-        super(GraphConvAblationModel, self).__init__()
-        self.gcn1_1 = GCNConv(path1_dim, activation='relu'); self.gcn1_2 = GCNConv(path1_dim, activation='relu')
-        self.dropout1 = Dropout(dropout_rate); self.pool1 = GlobalSumPool()
-        self.gat2_1 = GATConv(path2_dim, attn_heads=gat_heads, concat_heads=True, dropout_rate=dropout_rate, activation='relu')
-        self.gat2_2 = GATConv(path2_dim, attn_heads=gat_heads, concat_heads=False, dropout_rate=dropout_rate, activation='relu')
-        self.dropout2 = Dropout(dropout_rate); self.pool2 = GlobalSumPool()
-        self.cheb3_1 = ChebConv(path3_dim, K=cheb_k, activation='relu'); self.cheb3_2 = ChebConv(path3_dim, K=cheb_k, activation='relu')
-        self.dropout3 = Dropout(dropout_rate); self.pool3 = GlobalSumPool(); self.concat = Concatenate()
-    def call(self, inputs, training=None, return_block='all'):
-        x, a = inputs; x1 = self.gcn1_1([x, a]); x1 = self.gcn1_2([x1, a]); x1 = self.dropout1(x1, training=training); out1 = self.pool1(x1)
-        x2 = self.gat2_1([x, a]); x2 = self.gat2_2([x2, a]); x2 = self.dropout2(x2, training=training); out2 = self.pool2(x2)
-        x3 = self.cheb3_1([x, a]); x3 = self.cheb3_2([x3, a]); x3 = self.dropout3(x3, training=training); out3 = self.pool3(x3)
-        if return_block == 1: return out1
-        elif return_block == 2: return out2
-        elif return_block == 3: return out3
-        elif return_block == 'all': return self.concat([out1, out2, out3])
-        elif return_block == '1+2': return self.concat([out1, out2])
-        elif return_block == '1+3': return self.concat([out1, out3])
-        elif return_block == '2+3': return self.concat([out2, out3])
-        else: print(f"Warning: Invalid return_block value '{return_block}'. Defaulting to 'all'."); return self.concat([out1, out2, out3])
-
-
 
 start_time_data = time.time()
 data = pd.read_csv("combined_smiles_data.csv")
