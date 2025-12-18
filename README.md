@@ -10,7 +10,7 @@ If you use this repository or find our work helpful in your research, please cit
 
 Pala, M. A. (2025). XP-GCN: Extreme Learning Machines and Parallel Graph Convolutional Networks for High-Throughput Prediction of Blood-Brain Barrier Penetration based on Feature Fusion. Computational Biology and Chemistry, 108755.
 
-doi.org/10.1016/j.compbiolchem.2025.108755
+[doi.org/10.1016/j.compbiolchem.2025.108755](https://doi.org/10.1016/j.compbiolchem.2025.108755)
 
 
 Abstract
